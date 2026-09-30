@@ -47,9 +47,9 @@
   #flotantes img { position:absolute; left:0; top:0; opacity:0; will-change:transform, opacity; }
 
   @media (max-width: 700px) {
-    #titulo { flex-direction:column; gap:4px; }
-    #titulo .logo-titulo { height:clamp(46px, 15vw, 80px); }
-    #sombra-titulo { height:36vh; }
+    #titulo { flex-direction:column; gap:2px; }
+    #titulo .logo-titulo { height:clamp(34px, 10vw, 56px); }
+    #sombra-titulo { height:28vh; }
   }
   @media (prefers-reduced-motion: reduce) { #tocar, #inicio img { animation:none; } }
 </style>
@@ -294,7 +294,7 @@ function construirTitulo() {
   const logo = titulo.querySelector('.logo-titulo');
   const movil = innerWidth <= 700;
   const anchoLogo = movil || !logo ? 0 : logo.getBoundingClientRect().width || innerWidth * .12;
-  const fs = movil ? Math.min(48, innerWidth * .11) : Math.min(70, Math.max(30, innerWidth * .06));
+  const fs = movil ? Math.min(36, innerWidth * .085) : Math.min(70, Math.max(30, innerWidth * .06));
   const fuente = `${movil ? 500 : 400} ${fs}px "Jost", sans-serif`;
   const med = document.createElement('canvas').getContext('2d'); med.font = fuente;
 
@@ -303,7 +303,7 @@ function construirTitulo() {
     const pal = TITULO.split(' '), mitad = Math.ceil(pal.length / 2);
     lineas = [pal.slice(0, mitad).join(' '), pal.slice(mitad).join(' ')];
   }
-  const alturaLinea = fs * 1.15, pad = 14;
+  const alturaLinea = fs * (movil ? 1.05 : 1.15), pad = movil ? 6 : 14;
   anchoT = Math.ceil(Math.max(...lineas.map(l => med.measureText(l).width))) + pad * 2;
   altoT = Math.ceil(alturaLinea * lineas.length + pad * 2);
 
@@ -352,6 +352,32 @@ function dibujarTitulo(t, e) {
     ctxT.drawImage(chispa, x - p.tam, y - p.tam, p.tam * 2, p.tam * 2);
   }
   ctxT.globalAlpha = 1;
+}
+
+function recortarLogo(img) {
+  try {
+    const c = document.createElement('canvas');
+    c.width = img.naturalWidth; c.height = img.naturalHeight;
+    const g = c.getContext('2d');
+    g.drawImage(img, 0, 0);
+    const d = g.getImageData(0, 0, c.width, c.height).data;
+    let x0 = c.width, y0 = c.height, x1 = -1, y1 = -1;
+    for (let y = 0; y < c.height; y++) for (let x = 0; x < c.width; x++) {
+      if (d[(y * c.width + x) * 4 + 3] > 10) {
+        if (x < x0) x0 = x; if (x > x1) x1 = x; if (y < y0) y0 = y; if (y > y1) y1 = y;
+      }
+    }
+    if (x1 < 0 || (x0 === 0 && y0 === 0 && x1 === c.width - 1 && y1 === c.height - 1)) return;
+    const r = document.createElement('canvas');
+    r.width = x1 - x0 + 1; r.height = y1 - y0 + 1;
+    r.getContext('2d').drawImage(c, x0, y0, r.width, r.height, 0, 0, r.width, r.height);
+    img.src = r.toDataURL('image/png');
+  } catch (err) {}
+}
+const logoTitulo = titulo.querySelector('.logo-titulo');
+if (logoTitulo) {
+  if (logoTitulo.complete && logoTitulo.naturalWidth) recortarLogo(logoTitulo);
+  else logoTitulo.addEventListener('load', () => recortarLogo(logoTitulo), { once:true });
 }
 
 let listo = false, empezo = false, tInicio = 0;
