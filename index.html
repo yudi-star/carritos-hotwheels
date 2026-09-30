@@ -1,0 +1,429 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Feliz Día de los Carritos Hot Wheels</title>
+<link href="https://fonts.googleapis.com/css2?family=Jost:wght@300;400;500&display=swap" rel="stylesheet">
+<style>
+  :root { --glow:#7fe3ff; box-sizing:border-box;
+          padding-top:env(safe-area-inset-top,0px); padding-bottom:env(safe-area-inset-bottom,0px); }
+  html, body { margin:0; height:100%; background:#000; overflow:hidden; }
+  canvas { display:block; }
+  #escena3d { touch-action:none; }
+
+  #inicio {
+    position:fixed; inset:0; z-index:10; display:flex; flex-direction:column;
+    align-items:center; justify-content:center; gap:28px; cursor:pointer;
+    background:radial-gradient(circle at 50% 55%, #062a44 0%, #000 65%);
+    transition:opacity 1.2s ease;
+  }
+  #inicio.oculto { opacity:0; pointer-events:none; }
+  #inicio img { max-width:min(70vw, 420px); max-height:40vh; object-fit:contain;
+                filter:drop-shadow(0 0 25px rgba(60,180,255,.7)); animation:flotar 3s ease-in-out infinite; }
+  #tocar {
+    font-family:'Jost', sans-serif; font-weight:300; letter-spacing:.12em;
+    color:#eaffff; font-size:clamp(20px, 4vw, 30px);
+    text-shadow:0 0 8px var(--glow), 0 0 22px #1a8cff;
+    animation:latir 1.8s ease-in-out infinite;
+  }
+  @keyframes latir { 50% { opacity:.45; } }
+  @keyframes flotar { 50% { transform:translateY(-10px); } }
+
+  #titulo {
+    position:fixed; top:calc(env(safe-area-inset-top,0px) + 14px); left:0; right:0; margin:0; padding:0 12px;
+    display:flex; align-items:center; justify-content:center; gap:14px; flex-wrap:nowrap;
+    opacity:0; transform:translateY(-12px); transition:opacity 2s ease, transform 2s ease;
+    pointer-events:none; z-index:5;
+  }
+  #titulo.visible { opacity:1; transform:none; }
+  #titulo .logo-titulo { height:clamp(60px, 12vw, 138px); flex-shrink:0;
+    filter:drop-shadow(0 0 8px rgba(127,227,255,.9)) drop-shadow(0 0 22px rgba(42,168,255,.7)); }
+  .solo-lector { position:absolute; width:1px; height:1px; overflow:hidden; clip:rect(0 0 0 0); }
+  #sombra-titulo { position:fixed; top:0; left:0; right:0; height:30vh; z-index:4; pointer-events:none;
+    background:linear-gradient(#000 0%, rgba(0,0,0,.7) 45%, transparent 100%); }
+
+  #flotantes { position:fixed; inset:0; z-index:3; pointer-events:none; perspective:800px; overflow:hidden; }
+  #flotantes img { position:absolute; left:0; top:0; opacity:0; will-change:transform, opacity; }
+
+  @media (max-width: 700px) {
+    #titulo { flex-direction:column; gap:4px; }
+    #titulo .logo-titulo { height:clamp(46px, 15vw, 80px); }
+    #sombra-titulo { height:36vh; }
+  }
+  @media (prefers-reduced-motion: reduce) { #tocar, #inicio img { animation:none; } }
+</style>
+</head>
+<body>
+
+<div id="inicio">
+  <img src="assets/portada.png" alt="" onerror="this.remove()">
+  <div id="tocar">Cargando…</div>
+</div>
+
+<div id="flotantes"></div>
+<div id="sombra-titulo"></div>
+<h1 id="titulo">
+  <span class="solo-lector">Feliz Día de los Carritos Hot Wheels</span>
+  <canvas id="tituloCanvas" aria-hidden="true"></canvas>
+  <img class="logo-titulo" src="assets/portada.png" alt="" onerror="this.remove()">
+</h1>
+<audio id="musica" src="assets/musica.mp3" loop preload="auto"></audio>
+
+<script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/three@0.128.0/examples/js/controls/OrbitControls.js"></script>
+<script>
+const TITULO = 'Feliz Día de los Carritos';
+const LETRA_CORAZON = 'J';
+const SEGUNDOS_POR_FORMA = 1;
+const SEGUNDOS_TRANSICION = 0.8;
+
+const IMAGENES = [
+  'assets/carritos/carro1.png',
+  'assets/carritos/carro2.png',
+  'assets/carritos/carro3.png',
+  'assets/carritos/carro4.png',
+  'assets/carritos/carro5.png',
+];
+const CANTIDAD_FLOTANTES = 20;
+const TAMANO_CARRITOS = 3.6;
+
+const MENSAJES = [
+  'Te amo 3000', 'Eres mi persona favorita', 'Feliz día, amor', 'Te elijo siempre',
+  'Mi corazón es tuyo', 'Contigo todo es mejor', 'Gracias por existir',
+  'Hasta el infinito, contigo', 'Eres mi lugar seguro', 'Te quiero a toda velocidad'
+];
+const CANTIDAD_MENSAJES = 22;
+const VOLUMEN_MUSICA = 0.8;
+
+const VELOCIDAD_ROTACION = 0.5;
+const PERMITIR_ARRASTRAR = true;
+const PERMITIR_ZOOM      = true;
+const SEGUNDOS_PAUSA     = 3;
+const LIMITAR_VERTICAL   = true;
+
+const inicio = document.getElementById('inicio');
+const tocar  = document.getElementById('tocar');
+const titulo = document.getElementById('titulo');
+const musica = document.getElementById('musica');
+const reducido = matchMedia('(prefers-reduced-motion: reduce)').matches;
+const suavizar = x => { x = Math.min(Math.max(x, 0), 1); return 1 - Math.pow(1 - x, 3); };
+const suaveDoble = x => { x = Math.min(Math.max(x, 0), 1); return x < .5 ? 4*x*x*x : 1 - Math.pow(-2*x + 2, 3) / 2; };
+
+const escena = new THREE.Scene();
+escena.fog = new THREE.FogExp2(0x000814, 0.014);
+const camara = new THREE.PerspectiveCamera(60, innerWidth / innerHeight, 0.1, 500);
+camara.position.set(0, 10, 110);
+
+const render = new THREE.WebGLRenderer({ antialias:true });
+render.setPixelRatio(Math.min(devicePixelRatio, 2));
+render.setSize(innerWidth, innerHeight);
+render.domElement.id = 'escena3d';
+document.body.prepend(render.domElement);
+
+const controles = new THREE.OrbitControls(camara, render.domElement);
+controles.enableDamping = true;
+controles.enablePan = false;
+controles.minDistance = 20;
+controles.maxDistance = 70;
+controles.autoRotateSpeed = VELOCIDAD_ROTACION;
+controles.enableRotate = PERMITIR_ARRASTRAR;
+controles.enableZoom = PERMITIR_ZOOM;
+controles.rotateSpeed = 0.6;
+controles.enabled = false;
+if (LIMITAR_VERTICAL) { controles.minPolarAngle = Math.PI * 0.3; controles.maxPolarAngle = Math.PI * 0.62; }
+
+let giroAuto = true, temporizador = null;
+controles.addEventListener('start', () => { giroAuto = false; clearTimeout(temporizador); });
+controles.addEventListener('end', () => {
+  clearTimeout(temporizador);
+  temporizador = setTimeout(() => { giroAuto = true; }, SEGUNDOS_PAUSA * 1000);
+});
+
+function lienzoBrillo(tam, centro, medio, borde) {
+  const c = document.createElement('canvas'); c.width = c.height = tam;
+  const g = c.getContext('2d'), r = tam / 2;
+  const gr = g.createRadialGradient(r, r, 0, r, r, r);
+  gr.addColorStop(0, centro); gr.addColorStop(.3, medio); gr.addColorStop(1, borde);
+  g.fillStyle = gr; g.fillRect(0, 0, tam, tam);
+  return c;
+}
+const texPunto = new THREE.CanvasTexture(lienzoBrillo(64, 'rgba(255,255,255,1)', 'rgba(120,230,255,.8)', 'rgba(0,120,255,0)'));
+
+function nube(pos, tam, color) {
+  const geo = new THREE.BufferGeometry();
+  geo.setAttribute('position', new THREE.Float32BufferAttribute(pos, 3));
+  return new THREE.Points(geo, new THREE.PointsMaterial({
+    size:tam, map:texPunto, color, transparent:true, depthWrite:false, blending:THREE.AdditiveBlending
+  }));
+}
+
+const N = 4500;
+const formaCorazon = new Float32Array(N * 3);
+for (let i = 0; i < N; i++) {
+  const t = Math.random() * Math.PI * 2;
+  const x = 16 * Math.pow(Math.sin(t), 3);
+  const y = 13*Math.cos(t) - 5*Math.cos(2*t) - 2*Math.cos(3*t) - Math.cos(4*t);
+  const r = .55 + Math.random() * .1, n = () => (Math.random() - .5) * .9;
+  formaCorazon.set([x*r + n(), y*r + 4 + n(), n() * 1.5], i * 3);
+}
+const formaLetra = new Float32Array(N * 3);
+const remolinoTransicion = new Float32Array(N);
+for (let i = 0; i < N; i++) remolinoTransicion[i] = (Math.random() - .5) * 6;
+let letraLista = false;
+
+function crearFormaLetra() {
+  const tam = 256, c = document.createElement('canvas'); c.width = c.height = tam;
+  const g = c.getContext('2d');
+  g.fillStyle = '#fff'; g.textAlign = 'center'; g.textBaseline = 'middle';
+  g.font = `500 ${tam * .85}px "Jost", sans-serif`;
+  g.fillText(LETRA_CORAZON, tam / 2, tam / 2);
+  const datos = g.getImageData(0, 0, tam, tam).data, pts = [];
+  let minX = tam, maxX = 0, minY = tam, maxY = 0;
+  for (let y = 0; y < tam; y += 2) for (let x = 0; x < tam; x += 2) {
+    if (datos[(y * tam + x) * 4 + 3] > 128) {
+      pts.push([x, y]);
+      minX = Math.min(minX, x); maxX = Math.max(maxX, x); minY = Math.min(minY, y); maxY = Math.max(maxY, y);
+    }
+  }
+  if (!pts.length) return;
+  const escala = 16 / (maxY - minY), cx = (minX + maxX) / 2, cy = (minY + maxY) / 2;
+  for (let i = 0; i < N; i++) {
+    const [px, py] = pts[Math.floor(Math.random() * pts.length)];
+    const n = () => (Math.random() - .5) * .5;
+    formaLetra.set([(px - cx) * escala + n(), -(py - cy) * escala + 2.6 + n(), (Math.random() - .5) * 1.5], i * 3);
+  }
+  letraLista = true;
+}
+
+const corazon = nube(formaCorazon, .35, 0x9fefff);
+const posCorazon = corazon.geometry.attributes.position;
+escena.add(corazon);
+
+function mezclaForma(e) {
+  if (!letraLista || !empezo || reducido) return 0;
+  const ciclo = SEGUNDOS_POR_FORMA + SEGUNDOS_TRANSICION;
+  const p = (Math.max(e - 4.5, 0)) % (ciclo * 2);
+  if (p < SEGUNDOS_POR_FORMA) return 0;
+  if (p < ciclo) return suaveDoble((p - SEGUNDOS_POR_FORMA) / SEGUNDOS_TRANSICION);
+  if (p < ciclo + SEGUNDOS_POR_FORMA) return 1;
+  return 1 - suaveDoble((p - ciclo - SEGUNDOS_POR_FORMA) / SEGUNDOS_TRANSICION);
+}
+let ultimaMezcla = -1;
+function actualizarCorazon(k) {
+  if (k === ultimaMezcla) return;
+  ultimaMezcla = k;
+  const arr = posCorazon.array, desvio = Math.sin(k * Math.PI);
+  for (let i = 0; i < N; i++) {
+    const j = i * 3;
+    arr[j]     = formaCorazon[j]     + (formaLetra[j]     - formaCorazon[j])     * k;
+    arr[j + 1] = formaCorazon[j + 1] + (formaLetra[j + 1] - formaCorazon[j + 1]) * k;
+    arr[j + 2] = formaCorazon[j + 2] + (formaLetra[j + 2] - formaCorazon[j + 2]) * k + remolinoTransicion[i] * desvio;
+  }
+  posCorazon.needsUpdate = true;
+}
+
+const pr = [];
+for (let i = 0; i < 5000; i++) {
+  const a = Math.random() * Math.PI * 6, rad = 2 + a * 1.5 + (Math.random() - .5) * 2;
+  pr.push(Math.cos(a) * rad, -9 + (Math.random() - .5) * .8 + Math.sin(a*2) * .6, Math.sin(a) * rad);
+}
+const remolino = nube(pr, .25, 0x33ccff);
+escena.add(remolino);
+const pe = [];
+for (let i = 0; i < 1800; i++) pe.push((Math.random()-.5)*400, (Math.random()-.5)*400, (Math.random()-.5)*400);
+escena.add(nube(pe, .6, 0x6fa8ff));
+
+const capa = document.getElementById('flotantes');
+const imagenesOk = [];
+const cargaImagenes = Promise.all(IMAGENES.map(ruta => new Promise(res => {
+  const im = new Image();
+  im.onload = () => { imagenesOk.push(ruta); res(); };
+  im.onerror = () => { console.warn('No se encontró la imagen:', ruta); res(); };
+  im.src = ruta;
+})));
+const flotantes = [];
+function crearFlotantes() {
+  if (!imagenesOk.length) return;
+  for (let i = 0; i < CANTIDAD_FLOTANTES; i++) {
+    const el = document.createElement('img');
+    el.src = imagenesOk[i % imagenesOk.length]; el.alt = '';
+    capa.appendChild(el);
+    const ang = (i / CANTIDAD_FLOTANTES) * Math.PI * 2, radio = 17 + Math.random() * 9;
+    const pos = new THREE.Vector3(Math.cos(ang) * radio, (Math.random() - .5) * 22, Math.sin(ang) * radio);
+    flotantes.push({ el, pos, baseY:pos.y, alto:TAMANO_CARRITOS * (.85 + Math.random() * .3),
+                     fase:Math.random() * 10, retraso:1.5 + i * .15 });
+  }
+}
+const proy = new THREE.Vector3();
+
+function spriteTexto(texto) {
+  const c = document.createElement('canvas'), g = c.getContext('2d'), fs = 64;
+  const fuente = `300 ${fs}px "Jost", sans-serif`;
+  g.font = fuente;
+  c.width = Math.ceil(g.measureText(texto).width) + 60; c.height = fs + 40;
+  g.font = fuente; g.textBaseline = 'middle';
+  g.shadowColor = '#ff6fb5'; g.shadowBlur = 18; g.fillStyle = '#fff0f7';
+  g.fillText(texto, 30, c.height / 2);
+  const s = new THREE.Sprite(new THREE.SpriteMaterial({ map:new THREE.CanvasTexture(c), transparent:true, depthWrite:false, opacity:0 }));
+  s.scale.set(c.width * .02, c.height * .02, 1);
+  return s;
+}
+const mensajes = [];
+function colocarMensaje(s, alInicio) {
+  const ang = Math.random() * Math.PI * 2, radio = 6 + Math.random() * 16;
+  s.position.set(Math.cos(ang) * radio, alInicio ? (Math.random() - .5) * 36 : -20, Math.sin(ang) * radio);
+  s.userData.vel = .015 + Math.random() * .02;
+}
+function crearMensajes() {
+  for (let i = 0; i < CANTIDAD_MENSAJES; i++) {
+    const s = spriteTexto(MENSAJES[i % MENSAJES.length]);
+    colocarMensaje(s, true);
+    s.userData.retraso = 3 + i * .25;
+    escena.add(s); mensajes.push(s);
+  }
+}
+
+const lienzoTitulo = document.getElementById('tituloCanvas');
+const ctxT = lienzoTitulo.getContext('2d');
+const chispa = lienzoBrillo(64, 'rgba(159,239,255,1)', 'rgba(76,214,255,.8)', 'rgba(0,75,255,0)');
+let particulasTitulo = [], anchoT = 0, altoT = 0;
+
+function construirTitulo() {
+  const dpr = Math.min(devicePixelRatio, 2);
+  const logo = titulo.querySelector('.logo-titulo');
+  const movil = innerWidth <= 700;
+  const anchoLogo = movil || !logo ? 0 : logo.getBoundingClientRect().width || innerWidth * .12;
+  const fs = Math.min(70, Math.max(30, innerWidth * .06));
+  const fuente = `400 ${fs}px "Jost", sans-serif`;
+  const med = document.createElement('canvas').getContext('2d'); med.font = fuente;
+
+  let lineas = [TITULO];
+  if (med.measureText(TITULO).width + anchoLogo + 40 > innerWidth * .95) {
+    const pal = TITULO.split(' '), mitad = Math.ceil(pal.length / 2);
+    lineas = [pal.slice(0, mitad).join(' '), pal.slice(mitad).join(' ')];
+  }
+  const alturaLinea = fs * 1.15, pad = 14;
+  anchoT = Math.ceil(Math.max(...lineas.map(l => med.measureText(l).width))) + pad * 2;
+  altoT = Math.ceil(alturaLinea * lineas.length + pad * 2);
+
+  lienzoTitulo.width = anchoT * dpr; lienzoTitulo.height = altoT * dpr;
+  lienzoTitulo.style.width = anchoT + 'px'; lienzoTitulo.style.height = altoT + 'px';
+  ctxT.setTransform(dpr, 0, 0, dpr, 0, 0);
+
+  const off = document.createElement('canvas'); off.width = anchoT; off.height = altoT;
+  const g = off.getContext('2d');
+  g.font = fuente; g.fillStyle = '#fff'; g.textAlign = 'center'; g.textBaseline = 'middle';
+  lineas.forEach((l, i) => g.fillText(l, anchoT / 2, pad + alturaLinea * (i + .5)));
+  const datos = g.getImageData(0, 0, anchoT, altoT).data;
+  const paso = fs > 50 ? 3 : 2.2;
+  particulasTitulo = [];
+  for (let y = 0; y < altoT; y += paso) for (let x = 0; x < anchoT; x += paso) {
+    if (datos[(Math.floor(y) * anchoT + Math.floor(x)) * 4 + 3] > 120) {
+      const ruido = () => (Math.random() - .5) * paso * 1.4;
+      particulasTitulo.push({ x:x + ruido(), y:y + ruido(), fase:Math.random() * Math.PI * 2,
+                              tam:2.2 + Math.random() * 1.6, ox:(Math.random() - .5) * 60, oy:(Math.random() - .5) * 60 });
+    }
+  }
+}
+
+function dibujarTitulo(t, e) {
+  ctxT.clearRect(0, 0, anchoT, altoT);
+  ctxT.globalCompositeOperation = 'lighter';
+  const llegada = suavizar((e - 1.8) / 2.2);
+  const pulso = .8 + Math.sin(t * 3) * .2;
+  const latido = 1 + Math.sin(t * 2.5) * .015 * (reducido ? .3 : 1);
+  const cx = anchoT / 2, cy = altoT / 2;
+  for (const p of particulasTitulo) {
+    const x = cx + (p.x - cx) * latido + p.ox * (1 - llegada);
+    const y = cy + (p.y - cy) * latido + p.oy * (1 - llegada);
+    ctxT.globalAlpha = pulso * llegada;
+    ctxT.drawImage(chispa, x - p.tam, y - p.tam, p.tam * 2, p.tam * 2);
+  }
+  ctxT.globalAlpha = 1;
+}
+
+let listo = false, empezo = false, tInicio = 0;
+Promise.all([cargaImagenes, document.fonts.ready]).then(() => {
+  crearFormaLetra();
+  listo = true; tocar.textContent = 'Toca para abrir';
+});
+setTimeout(() => { if (!listo) { listo = true; tocar.textContent = 'Toca para abrir'; } }, 6000);
+
+inicio.addEventListener('click', () => {
+  if (!listo || empezo) return;
+  empezo = true;
+  crearFlotantes();
+  crearMensajes();
+  titulo.classList.add('visible');
+  construirTitulo();
+  musica.volume = 0;
+  musica.play().catch(() => {});
+  const subir = setInterval(() => {
+    musica.volume = Math.min(VOLUMEN_MUSICA, musica.volume + .05);
+    if (musica.volume >= VOLUMEN_MUSICA) clearInterval(subir);
+  }, 120);
+  inicio.classList.add('oculto');
+  tInicio = reloj.getElapsedTime();
+});
+
+const reloj = new THREE.Clock();
+function animar() {
+  requestAnimationFrame(animar);
+  const t = reloj.getElapsedTime(), m = reducido ? .3 : 1;
+  const e = empezo ? t - tInicio : 0;
+
+  if (empezo && e < 4.2) {
+    const k = suavizar(e / 4);
+    camara.position.set(0, 10 - 6 * k, 110 - 70 * k);
+    camara.lookAt(0, 0, 0);
+  } else if (empezo && !controles.enabled) {
+    controles.enabled = true;
+  }
+
+  actualizarCorazon(mezclaForma(e));
+  const latido = 1 + Math.sin(t * 2.5) * .04 * m;
+  corazon.scale.setScalar(latido);
+  corazon.material.opacity = .8 + Math.sin(t * 3) * .2;
+  remolino.rotation.y -= .003 * m;
+
+  const pxPorUnidad = innerHeight / (2 * Math.tan(THREE.MathUtils.degToRad(camara.fov / 2)));
+  flotantes.forEach(f => {
+    f.pos.y = f.baseY + Math.sin(t * .8 + f.fase) * 1.2 * m;
+    proy.copy(f.pos).project(camara);
+    const dist = f.pos.distanceTo(camara.position);
+    if (proy.z > 1 || dist < 3) { f.el.style.opacity = 0; return; }
+    const x = (proy.x * .5 + .5) * innerWidth, y = (-proy.y * .5 + .5) * innerHeight;
+    const giroY = Math.sin(t * .7 + f.fase) * 25 * m, giroZ = Math.sin(t * .6 + f.fase) * 7 * m;
+    f.el.style.height = (f.alto * pxPorUnidad / dist) + 'px';
+    f.el.style.transform = `translate(${x}px, ${y}px) translate(-50%, -50%) rotateY(${giroY}deg) rotateZ(${giroZ}deg)`;
+    f.el.style.zIndex = Math.round(1000 - dist * 10);
+    f.el.style.opacity = suavizar((e - f.retraso) / 1.5) * Math.min(1, (dist - 3) / 6);
+  });
+
+  mensajes.forEach(s => {
+    s.position.y += s.userData.vel * m;
+    if (s.position.y > 18) colocarMensaje(s, false);
+    const dist = s.position.distanceTo(camara.position);
+    const cerca = Math.min(Math.max((dist - 12) / 10, 0), 1);
+    const borde = 1 - Math.min(Math.max((s.position.y - 8) / 8, 0), 1);
+    s.material.opacity = suavizar((e - s.userData.retraso) / 2) * cerca * borde * .9;
+  });
+
+  if (empezo) dibujarTitulo(t, e);
+
+  controles.autoRotate = giroAuto && VELOCIDAD_ROTACION !== 0 && !reducido;
+  if (controles.enabled) controles.update();
+  render.render(escena, camara);
+}
+animar();
+
+addEventListener('resize', () => {
+  camara.aspect = innerWidth / innerHeight;
+  camara.updateProjectionMatrix();
+  render.setSize(innerWidth, innerHeight);
+  if (empezo) construirTitulo();
+});
+</script>
+</body>
+</html>
