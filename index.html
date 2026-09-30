@@ -89,8 +89,7 @@ const CANTIDAD_FLOTANTES = 20;
 const TAMANO_CARRITOS = 3.6;
 
 const MENSAJES = [
-  '¡Yo te amo 3 millones)!', 'Eres mi persona favorita', 'Feliz día, amor', 'Te elijo siempre',
-
+  '¡Yo te amo 3 millones!', 'Eres mi persona favorita', 'Feliz día, amor', 'Te elijo siempre',
   'Mi corazón es tuyo', 'Contigo todo es mejor', 'Gracias por existir',
   'Hasta el infinito, contigo', 'Eres mi lugar seguro', 'Te quiero a toda velocidad'
 ];
@@ -288,19 +287,19 @@ function crearMensajes() {
 const lienzoTitulo = document.getElementById('tituloCanvas');
 const ctxT = lienzoTitulo.getContext('2d');
 const chispa = lienzoBrillo(64, 'rgba(159,239,255,1)', 'rgba(76,214,255,.8)', 'rgba(0,75,255,0)');
-let particulasTitulo = [], anchoT = 0, altoT = 0;
+let particulasTitulo = [], anchoT = 0, altoT = 0, capaTexto = null;
 
 function construirTitulo() {
   const dpr = Math.min(devicePixelRatio, 2);
   const logo = titulo.querySelector('.logo-titulo');
   const movil = innerWidth <= 700;
   const anchoLogo = movil || !logo ? 0 : logo.getBoundingClientRect().width || innerWidth * .12;
-  const fs = Math.min(70, Math.max(30, innerWidth * .06));
-  const fuente = `400 ${fs}px "Jost", sans-serif`;
+  const fs = movil ? Math.min(48, innerWidth * .11) : Math.min(70, Math.max(30, innerWidth * .06));
+  const fuente = `${movil ? 500 : 400} ${fs}px "Jost", sans-serif`;
   const med = document.createElement('canvas').getContext('2d'); med.font = fuente;
 
   let lineas = [TITULO];
-  if (med.measureText(TITULO).width + anchoLogo + 40 > innerWidth * .95) {
+  if (movil || med.measureText(TITULO).width + anchoLogo + 40 > innerWidth * .95) {
     const pal = TITULO.split(' '), mitad = Math.ceil(pal.length / 2);
     lineas = [pal.slice(0, mitad).join(' '), pal.slice(mitad).join(' ')];
   }
@@ -317,13 +316,15 @@ function construirTitulo() {
   g.font = fuente; g.fillStyle = '#fff'; g.textAlign = 'center'; g.textBaseline = 'middle';
   lineas.forEach((l, i) => g.fillText(l, anchoT / 2, pad + alturaLinea * (i + .5)));
   const datos = g.getImageData(0, 0, anchoT, altoT).data;
-  const paso = fs > 50 ? 3 : 2.2;
+  const paso = Math.max(1.6, fs * .045);
+  const tamBase = Math.max(1.3, fs * .032);
+  capaTexto = movil ? { lineas, fuente, pad, alturaLinea } : null;
   particulasTitulo = [];
   for (let y = 0; y < altoT; y += paso) for (let x = 0; x < anchoT; x += paso) {
     if (datos[(Math.floor(y) * anchoT + Math.floor(x)) * 4 + 3] > 120) {
-      const ruido = () => (Math.random() - .5) * paso * 1.4;
+      const ruido = () => (Math.random() - .5) * paso * (movil ? .7 : 1.4);
       particulasTitulo.push({ x:x + ruido(), y:y + ruido(), fase:Math.random() * Math.PI * 2,
-                              tam:2.2 + Math.random() * 1.6, ox:(Math.random() - .5) * 60, oy:(Math.random() - .5) * 60 });
+                              tam:tamBase * (1 + Math.random() * .7), ox:(Math.random() - .5) * 60, oy:(Math.random() - .5) * 60 });
     }
   }
 }
@@ -335,6 +336,15 @@ function dibujarTitulo(t, e) {
   const pulso = .8 + Math.sin(t * 3) * .2;
   const latido = 1 + Math.sin(t * 2.5) * .015 * (reducido ? .3 : 1);
   const cx = anchoT / 2, cy = altoT / 2;
+  if (capaTexto) {
+    ctxT.save();
+    ctxT.globalCompositeOperation = 'source-over';
+    ctxT.globalAlpha = .55 * llegada;
+    ctxT.font = capaTexto.fuente; ctxT.textAlign = 'center'; ctxT.textBaseline = 'middle';
+    ctxT.shadowColor = '#2aa8ff'; ctxT.shadowBlur = 10; ctxT.fillStyle = '#bff4ff';
+    capaTexto.lineas.forEach((l, i) => ctxT.fillText(l, cx, capaTexto.pad + capaTexto.alturaLinea * (i + .5)));
+    ctxT.restore();
+  }
   for (const p of particulasTitulo) {
     const x = cx + (p.x - cx) * latido + p.ox * (1 - llegada);
     const y = cy + (p.y - cy) * latido + p.oy * (1 - llegada);
