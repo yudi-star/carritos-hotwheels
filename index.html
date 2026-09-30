@@ -77,6 +77,7 @@
 <script>
 const PARTES_TITULO = ['Feliz Día', 'de los Carritos'];
 const SEGUNDOS_APARICION = 2.5;
+const TAMANO_TITULO_MOVIL = 34;
 const LETRA_CORAZON = 'J';
 const SEGUNDOS_POR_FORMA = 1.5;
 const SEGUNDOS_TRANSICION = 2.5;
@@ -293,11 +294,11 @@ const chispa = lienzoBrillo(64, 'rgba(159,239,255,1)', 'rgba(76,214,255,.8)', 'r
 let particulasTitulo = [], anchoT = 0, altoT = 0, capaTexto = null;
 
 function construirTitulo() {
-  const dpr = Math.min(devicePixelRatio, 2);
+  const dpr = Math.min(devicePixelRatio, 3);
   const logo = titulo.querySelector('.logo-titulo');
   const movil = innerWidth <= 700;
   const anchoLogo = movil || !logo ? 0 : logo.getBoundingClientRect().width || innerWidth * .12;
-  const fs = movil ? Math.min(36, innerWidth * .085) : Math.min(70, Math.max(30, innerWidth * .06));
+  const fs = movil ? Math.min(TAMANO_TITULO_MOVIL, innerWidth * .09) : Math.min(70, Math.max(30, innerWidth * .06));
   const fuente = `${movil ? 500 : 400} ${fs}px "Jost", sans-serif`;
   const med = document.createElement('canvas').getContext('2d'); med.font = fuente;
   const completo = PARTES_TITULO.join(' ');
@@ -323,8 +324,8 @@ function construirTitulo() {
   lienzoTitulo.style.width = anchoT + 'px'; lienzoTitulo.style.height = altoT + 'px';
   ctxT.setTransform(dpr, 0, 0, dpr, 0, 0);
 
-  const paso = Math.max(1.6, fs * .045);
-  const tamBase = Math.max(1.3, fs * .032);
+  const paso = movil ? fs * .07 : Math.max(1.6, fs * .045);
+  const tamBase = movil ? fs * .028 : Math.max(1.3, fs * .032);
   capaTexto = movil ? { fuente, posiciones } : null;
   particulasTitulo = [];
   const off = document.createElement('canvas'); off.width = anchoT; off.height = altoT;
@@ -336,7 +337,7 @@ function construirTitulo() {
     const datos = g.getImageData(0, 0, anchoT, altoT).data;
     for (let y = 0; y < altoT; y += paso) for (let x = 0; x < anchoT; x += paso) {
       if (datos[(Math.floor(y) * anchoT + Math.floor(x)) * 4 + 3] > 120) {
-        const ruido = () => (Math.random() - .5) * paso * (movil ? .7 : 1.4);
+        const ruido = () => (Math.random() - .5) * paso * (movil ? .5 : 1.4);
         particulasTitulo.push({ x:x + ruido(), y:y + ruido(), grupo, r:Math.random(),
                                 tam:tamBase * (1 + Math.random() * .7),
                                 ox:(Math.random() - .5) * 180, oy:(Math.random() - .5) * 120 });
@@ -357,9 +358,9 @@ function dibujarTitulo(t, e) {
   if (capaTexto) {
     ctxT.save();
     ctxT.font = capaTexto.fuente; ctxT.textBaseline = 'middle';
-    ctxT.shadowColor = '#2aa8ff'; ctxT.shadowBlur = 10; ctxT.fillStyle = '#bff4ff';
+    ctxT.shadowColor = '#2aa8ff'; ctxT.shadowBlur = 6; ctxT.fillStyle = '#eafcff';
     capaTexto.posiciones.forEach((pos, i) => {
-      ctxT.globalAlpha = .55 * suavizar(progresoParte(e, i) * 1.2 - .2);
+      ctxT.globalAlpha = .95 * suavizar(progresoParte(e, i) * 1.2 - .2);
       ctxT.textAlign = pos.align;
       ctxT.fillText(pos.texto, pos.x, pos.y);
     });
@@ -373,7 +374,7 @@ function dibujarTitulo(t, e) {
     if (ll <= 0) continue;
     const x = cx + (p.x - cx) * latido + p.ox * (1 - ll);
     const y = cy + (p.y - cy) * latido + p.oy * (1 - ll);
-    ctxT.globalAlpha = pulso * ll;
+    ctxT.globalAlpha = pulso * ll * (capaTexto ? .55 : 1);
     ctxT.drawImage(chispa, x - p.tam, y - p.tam, p.tam * 2, p.tam * 2);
   }
   ctxT.globalCompositeOperation = 'source-over';
