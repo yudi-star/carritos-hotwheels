@@ -38,7 +38,9 @@
   }
   #titulo.visible { opacity:1; transform:none; }
   #titulo .logo-titulo { height:clamp(60px, 12vw, 138px); flex-shrink:0;
+    opacity:0; transform:scale(.8); transition-property:opacity, transform; transition-timing-function:ease;
     filter:drop-shadow(0 0 8px rgba(127,227,255,.9)) drop-shadow(0 0 22px rgba(42,168,255,.7)); }
+  #titulo .logo-titulo.visible { opacity:1; transform:none; }
   .solo-lector { position:absolute; width:1px; height:1px; overflow:hidden; clip:rect(0 0 0 0); }
   #sombra-titulo { position:fixed; top:0; left:0; right:0; height:30vh; z-index:4; pointer-events:none;
     background:linear-gradient(#000 0%, rgba(0,0,0,.7) 45%, transparent 100%); }
@@ -73,10 +75,11 @@
 <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/three@0.128.0/examples/js/controls/OrbitControls.js"></script>
 <script>
-const TITULO = 'Feliz Día de los Carritos';
+const PARTES_TITULO = ['Feliz Día', 'de los Carritos'];
+const SEGUNDOS_APARICION = 2.5;
 const LETRA_CORAZON = 'J';
-const SEGUNDOS_POR_FORMA = 1;
-const SEGUNDOS_TRANSICION = 0.8;
+const SEGUNDOS_POR_FORMA = 1.5;
+const SEGUNDOS_TRANSICION = 2.5;
 
 const IMAGENES = [
   'assets/carritos/carro1.png',
@@ -297,60 +300,83 @@ function construirTitulo() {
   const fs = movil ? Math.min(36, innerWidth * .085) : Math.min(70, Math.max(30, innerWidth * .06));
   const fuente = `${movil ? 500 : 400} ${fs}px "Jost", sans-serif`;
   const med = document.createElement('canvas').getContext('2d'); med.font = fuente;
-
-  let lineas = [TITULO];
-  if (movil || med.measureText(TITULO).width + anchoLogo + 40 > innerWidth * .95) {
-    const pal = TITULO.split(' '), mitad = Math.ceil(pal.length / 2);
-    lineas = [pal.slice(0, mitad).join(' '), pal.slice(mitad).join(' ')];
-  }
+  const completo = PARTES_TITULO.join(' ');
+  const unaLinea = !movil && med.measureText(completo).width + anchoLogo + 40 <= innerWidth * .95;
   const alturaLinea = fs * (movil ? 1.05 : 1.15), pad = movil ? 6 : 14;
-  anchoT = Math.ceil(Math.max(...lineas.map(l => med.measureText(l).width))) + pad * 2;
-  altoT = Math.ceil(alturaLinea * lineas.length + pad * 2);
+
+  const posiciones = [];
+  if (unaLinea) {
+    anchoT = Math.ceil(med.measureText(completo).width) + pad * 2;
+    altoT = Math.ceil(alturaLinea + pad * 2);
+    let x = pad;
+    PARTES_TITULO.forEach(texto => {
+      posiciones.push({ texto, x, y:pad + alturaLinea / 2, align:'left' });
+      x += med.measureText(texto + ' ').width;
+    });
+  } else {
+    anchoT = Math.ceil(Math.max(...PARTES_TITULO.map(l => med.measureText(l).width))) + pad * 2;
+    altoT = Math.ceil(alturaLinea * PARTES_TITULO.length + pad * 2);
+    PARTES_TITULO.forEach((texto, i) => posiciones.push({ texto, x:anchoT / 2, y:pad + alturaLinea * (i + .5), align:'center' }));
+  }
 
   lienzoTitulo.width = anchoT * dpr; lienzoTitulo.height = altoT * dpr;
   lienzoTitulo.style.width = anchoT + 'px'; lienzoTitulo.style.height = altoT + 'px';
   ctxT.setTransform(dpr, 0, 0, dpr, 0, 0);
 
-  const off = document.createElement('canvas'); off.width = anchoT; off.height = altoT;
-  const g = off.getContext('2d');
-  g.font = fuente; g.fillStyle = '#fff'; g.textAlign = 'center'; g.textBaseline = 'middle';
-  lineas.forEach((l, i) => g.fillText(l, anchoT / 2, pad + alturaLinea * (i + .5)));
-  const datos = g.getImageData(0, 0, anchoT, altoT).data;
   const paso = Math.max(1.6, fs * .045);
   const tamBase = Math.max(1.3, fs * .032);
-  capaTexto = movil ? { lineas, fuente, pad, alturaLinea } : null;
+  capaTexto = movil ? { fuente, posiciones } : null;
   particulasTitulo = [];
-  for (let y = 0; y < altoT; y += paso) for (let x = 0; x < anchoT; x += paso) {
-    if (datos[(Math.floor(y) * anchoT + Math.floor(x)) * 4 + 3] > 120) {
-      const ruido = () => (Math.random() - .5) * paso * (movil ? .7 : 1.4);
-      particulasTitulo.push({ x:x + ruido(), y:y + ruido(), fase:Math.random() * Math.PI * 2,
-                              tam:tamBase * (1 + Math.random() * .7), ox:(Math.random() - .5) * 60, oy:(Math.random() - .5) * 60 });
+  const off = document.createElement('canvas'); off.width = anchoT; off.height = altoT;
+  const g = off.getContext('2d');
+  posiciones.forEach((pos, grupo) => {
+    g.clearRect(0, 0, anchoT, altoT);
+    g.font = fuente; g.fillStyle = '#fff'; g.textAlign = pos.align; g.textBaseline = 'middle';
+    g.fillText(pos.texto, pos.x, pos.y);
+    const datos = g.getImageData(0, 0, anchoT, altoT).data;
+    for (let y = 0; y < altoT; y += paso) for (let x = 0; x < anchoT; x += paso) {
+      if (datos[(Math.floor(y) * anchoT + Math.floor(x)) * 4 + 3] > 120) {
+        const ruido = () => (Math.random() - .5) * paso * (movil ? .7 : 1.4);
+        particulasTitulo.push({ x:x + ruido(), y:y + ruido(), grupo, r:Math.random(),
+                                tam:tamBase * (1 + Math.random() * .7),
+                                ox:(Math.random() - .5) * 180, oy:(Math.random() - .5) * 120 });
+      }
     }
-  }
+  });
+}
+
+function progresoParte(e, i) {
+  return (e - 1.8 - i * SEGUNDOS_APARICION) / SEGUNDOS_APARICION;
 }
 
 function dibujarTitulo(t, e) {
   ctxT.clearRect(0, 0, anchoT, altoT);
-  ctxT.globalCompositeOperation = 'lighter';
-  const llegada = suavizar((e - 1.8) / 2.2);
   const pulso = .8 + Math.sin(t * 3) * .2;
   const latido = 1 + Math.sin(t * 2.5) * .015 * (reducido ? .3 : 1);
   const cx = anchoT / 2, cy = altoT / 2;
   if (capaTexto) {
     ctxT.save();
-    ctxT.globalCompositeOperation = 'source-over';
-    ctxT.globalAlpha = .55 * llegada;
-    ctxT.font = capaTexto.fuente; ctxT.textAlign = 'center'; ctxT.textBaseline = 'middle';
+    ctxT.font = capaTexto.fuente; ctxT.textBaseline = 'middle';
     ctxT.shadowColor = '#2aa8ff'; ctxT.shadowBlur = 10; ctxT.fillStyle = '#bff4ff';
-    capaTexto.lineas.forEach((l, i) => ctxT.fillText(l, cx, capaTexto.pad + capaTexto.alturaLinea * (i + .5)));
+    capaTexto.posiciones.forEach((pos, i) => {
+      ctxT.globalAlpha = .55 * suavizar(progresoParte(e, i) * 1.2 - .2);
+      ctxT.textAlign = pos.align;
+      ctxT.fillText(pos.texto, pos.x, pos.y);
+    });
     ctxT.restore();
   }
+  ctxT.globalCompositeOperation = 'lighter';
   for (const p of particulasTitulo) {
-    const x = cx + (p.x - cx) * latido + p.ox * (1 - llegada);
-    const y = cy + (p.y - cy) * latido + p.oy * (1 - llegada);
-    ctxT.globalAlpha = pulso * llegada;
+    const bruto = progresoParte(e, p.grupo);
+    if (bruto <= 0) continue;
+    const ll = suaveDoble((bruto - p.r * .35) / .65);
+    if (ll <= 0) continue;
+    const x = cx + (p.x - cx) * latido + p.ox * (1 - ll);
+    const y = cy + (p.y - cy) * latido + p.oy * (1 - ll);
+    ctxT.globalAlpha = pulso * ll;
     ctxT.drawImage(chispa, x - p.tam, y - p.tam, p.tam * 2, p.tam * 2);
   }
+  ctxT.globalCompositeOperation = 'source-over';
   ctxT.globalAlpha = 1;
 }
 
@@ -394,6 +420,11 @@ inicio.addEventListener('click', () => {
   crearMensajes();
   titulo.classList.add('visible');
   construirTitulo();
+  const logoT = titulo.querySelector('.logo-titulo');
+  if (logoT) {
+    logoT.style.transitionDuration = SEGUNDOS_APARICION + 's';
+    setTimeout(() => logoT.classList.add('visible'), (1.8 + PARTES_TITULO.length * SEGUNDOS_APARICION) * 1000);
+  }
   musica.volume = 0;
   musica.play().catch(() => {});
   const subir = setInterval(() => {
